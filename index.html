@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Inspección de Calidad (Agro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f9ff; /* sky-50 */
+        }
+        
+        /* Animación de la faja transportadora */
+        @keyframes moveBelt {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        
+        #conveyor-belt-items {
+            display: inline-block;
+            white-space: nowrap;
+            font-size: 3.5rem; /* 56px */
+            line-height: 1;
+            animation: moveBelt 30s linear infinite;
+        }
+
+        #inspection-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: rgba(239, 68, 68, 0.7); /* red-500 con opacidad */
+            box-shadow: 0 0 15px 3px rgba(239, 68, 68, 0.6);
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        /* Efecto de pulso para la línea */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        #inspection-line {
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        /* Estilos para el Log */
+        #inspection-log {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #0c0a09; /* stone-950 */
+            color: #a7f3d0; /* emerald-200 */
+        }
+        #inspection-log span.rejected {
+            color: #fca5a5; /* red-300 */
+        }
+        #inspection-log span.approved {
+            color: #bbf7d0; /* green-200 */
+        }
+        #inspection-log span.code {
+            color: #fef08a; /* yellow-200 */
+            font-weight: 600;
+        }
+        #inspection-log span.product {
+            color: #a5f3fc; /* cyan-200 */
+        }
+    </style>
+</head>
+<body class="text-gray-900">
+
+    <!-- Banner de Autoría -->
+    <div class="w-full bg-blue-800 p-2 text-center text-sm text-white font-semibold">
+        Proyecto Demo para Damper por Enrique Vera
+    </div>
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-6xl">
+
+        <!-- Cabecera -->
+        <header class="bg-white p-6 rounded-2xl shadow-lg mb-8 border border-gray-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-blue-900">Simulador de Inspección de Calidad</h1>
+                    <p class="text-gray-600 mt-1">Simulación de línea de congelado (Paltas 🥑 y Arándanos 🫐)</p>
+                </div>
+                <i class="fas fa-clipboard-check fa-3x text-blue-400"></i>
+            </div>
+        </header>
+
+        <!-- Marcador (Scoreboard) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-blue-100 p-4 rounded-xl shadow-md text-center">
+                <p class="text-sm font-medium text-blue-700 uppercase">Lote Actual</p>
+                <p id="lote-id" class="text-3xl font-extrabold text-blue-900">L-001</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md text-center">
+                <p class="text-sm font-medium text-gray-500 uppercase">Total Inspeccionado</p>
+                <p id="total-inspected" class="text-3xl font-extrabold text-gray-800">0</p>
+            </div>
+            <div class="bg-green-100 p-4 rounded-xl shadow-md text-center">
+                <p class="text-sm font-medium text-green-700 uppercase">Aprobados</p>
+                <p id="total-approved" class="text-3xl font-extrabold text-green-800">0</p>
+            </div>
+            <div class="bg-red-100 p-4 rounded-xl shadow-md text-center">
+                <p class="text-sm font-medium text-red-700 uppercase">Rechazados</p>
+                <p id="total-rejected" class="text-3xl font-extrabold text-red-800">0</p>
+            </div>
+        </div>
+
+        <!-- Faja Transportadora -->
+        <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Línea de Producción</h2>
+            <div id="conveyor-belt-container" class="relative w-full h-24 bg-gray-700 rounded-lg overflow-hidden border-4 border-gray-500 shadow-inner">
+                <!-- Línea de escaneo -->
+                <div id="inspection-line"></div>
+                
+                <!-- Items en la faja -->
+                <div id="conveyor-belt-items" class="h-24 flex items-center">
+                    <!-- El contenido se duplicará con JS para el bucle infinito -->
+                    <span>&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;🥑&nbsp;&nbsp;&nbsp;🫐&nbsp;&nbsp;&nbsp;</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Control y Resultados -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <!-- Izquierda: Controles -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-xl font-semibold mb-6 text-gray-700">Panel de Control del Inspector</h2>
+                <div class="flex flex-col gap-4">
+                    <button id="inspect-btn" class="w-full bg-blue-600 text-white font-bold py-6 px-6 rounded-lg hover:bg-blue-700 transition-transform transform hover:scale-105 shadow-md text-2xl">
+                        <i class="fas fa-search-plus mr-3"></i>INSPECCIONAR
+                    </button>
+                    <button id="reset-btn" class="w-full bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg hover:bg-gray-400 transition shadow-sm">
+                        <i class="fas fa-redo mr-2"></i>Comenzar Nuevo Lote
+                    </button>
+                </div>
+
+                <!-- Resultados de Inspección -->
+                <div class="mt-8">
+                    <h3 class="text-lg font-semibold text-gray-700">Último Resultado:</h3>
+                    <!-- Se cambió h-36 por min-h-36 para permitir que crezca -->
+                    <div id="result-display" class="mt-2 p-6 rounded-lg text-center min-h-36 flex flex-col justify-center items-center bg-gray-50 border border-gray-200">
+                        <p class="text-3xl font-bold text-gray-400">Presione "Inspeccionar"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Derecha: Log de Inspección -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Log de Aseguramiento de Calidad</h2>
+                <div id="inspection-log-container" class="h-80 border border-gray-300 rounded-lg overflow-y-auto p-3">
+                    <div id="inspection-log">
+                        <!-- Los registros aparecerán aquí -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Declaración de Elementos ---
+            const inspectBtn = document.getElementById('inspect-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            
+            const totalInspectedDisplay = document.getElementById('total-inspected');
+            const totalApprovedDisplay = document.getElementById('total-approved');
+            const totalRejectedDisplay = document.getElementById('total-rejected');
+            const loteIdDisplay = document.getElementById('lote-id');
+            
+            const resultDisplay = document.getElementById('result-display');
+            const inspectionLog = document.getElementById('inspection-log');
+            const logContainer = document.getElementById('inspection-log-container');
+
+            const beltItems = document.getElementById('conveyor-belt-items');
+            beltItems.innerHTML += beltItems.innerHTML; // Duplicar items para bucle de animación
+
+            // --- Estado de la Simulación ---
+            let totalInspected = 0;
+            let totalApproved = 0;
+            let totalRejected = 0;
+            let loteId = 1;
+
+            const productTypes = ["Palta 🥑", "Arándano 🫐"];
+            
+            // --- MODIFICADO: Base de datos de defectos más profesional ---
+            const defects = [
+                {
+                    descripcion: "Defecto de Color",
+                    motivo: "Madurez inconsistente",
+                    codigo: "CAL-C-01",
+                    norma: "Incumple Art. 3.2.1 del SOP-CAL-04"
+                },
+                {
+                    descripcion: "Calibre Incorrecto",
+                    motivo: "Fruta fuera de rango (Pequeña)",
+                    codigo: "CAL-S-03",
+                    norma: "Incumple Art. 2.1.5 del SOP-CAL-02"
+                },
+                {
+                    descripcion: "Daño Mecánico",
+                    motivo: "Golpe/Magulladura visible",
+                    codigo: "CAL-D-05",
+                    norma: "Incumple Art. 5.1.a (Tolerancia Cero)"
+                },
+                {
+                    descripcion: "Contaminación Biológica",
+                    motivo: "Presencia de Hongo (Moho)",
+                    codigo: "SEC-B-01",
+                    norma: "Incumple Art. 1.4.2 (Inocuidad)"
+                },
+                {
+                    descripcion: "Firmeza Inconsistente",
+                    motivo: "Producto blando (sobremaduro)",
+                    codigo: "CAL-F-02",
+                    norma: "Incumple Art. 3.3.4 del SOP-CAL-04"
+                },
+                {
+                    descripcion: "Daño Superficial",
+                    motivo: "Cicatriz o Rasguño (>5mm)",
+                    codigo: "CAL-D-07",
+                    norma: "Incumple Art. 5.2.c (Daño Leve)"
+                }
+            ];
+
+            // --- Funciones ---
+
+            function inspectProduct() {
+                // 1. Aumentar contador
+                totalInspected++;
+
+                // 2. Decidir producto y resultado
+                const product = productTypes[Math.floor(Math.random() * productTypes.length)];
+                const isApproved = Math.random() < 0.85; // 85% de probabilidad de ser aprobado
+                
+                let defectInfo; // Ahora será un objeto
+                let resultClass = "approved";
+                let resultText = "APROBADO";
+                let resultColor = "text-green-600";
+                
+                if (isApproved) {
+                    totalApproved++;
+                    // Objeto de info para Aprobado
+                    defectInfo = {
+                        descripcion: "Cumple con estándares de calidad",
+                        motivo: "N/A",
+                        codigo: "PASS-OK",
+                        norma: "Cumple SOP-CAL-04"
+                    };
+
+                } else {
+                    totalRejected++;
+                    // Selecciona un objeto de defecto al azar
+                    defectInfo = defects[Math.floor(Math.random() * defects.length)];
+                    resultClass = "rejected";
+                    resultText = "RECHAZADO";
+                    resultColor = "text-red-600";
+                }
+
+                // 3. Actualizar Marcador
+                totalInspectedDisplay.textContent = totalInspected;
+                totalApprovedDisplay.textContent = totalApproved;
+                totalRejectedDisplay.textContent = totalRejected;
+
+                // 4. --- MODIFICADO: Actualizar Panel de Resultados (más profesional) ---
+                resultDisplay.className = `mt-2 p-6 rounded-lg text-center min-h-36 flex flex-col justify-center items-center border-2 ${isApproved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`;
+                resultDisplay.innerHTML = `
+                    <p class="text-3xl font-extrabold ${resultColor}">${resultText}</p>
+                    <p class="text-sm text-gray-700 mt-2"><b>Producto:</b> ${product}</p>
+                    <div class="text-left w-full mt-3 px-2">
+                        <p class="text-sm text-gray-800"><b>- Causa:</b> ${defectInfo.descripcion} (${defectInfo.motivo})</p>
+                        <p class="text-sm text-gray-800"><b>- Código:</b> <span class="font-mono font-semibold text-purple-700">${defectInfo.codigo}</span></p>
+                        <p class="text-sm text-gray-800"><b>- Norma:</b> <span class="font-mono text-gray-600">${defectInfo.norma}</span></p>
+                    </div>
+                `;
+
+                // 5. --- MODIFICADO: Añadir al Log (más profesional) ---
+                logEntry(product, resultText, defectInfo.descripcion, defectInfo.codigo, resultClass);
+            }
+
+            // --- MODIFICADO: Log con más detalles (código) ---
+            function logEntry(product, result, info, code, cssClass) {
+                const timestamp = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const newLog = document.createElement('p');
+                newLog.innerHTML = `[${timestamp}] - <span class="${cssClass}">${result}</span>: <span class="product">${product}</span> | ${info} | <span class="code">${code}</span>`;
+                
+                // Añadir al principio del log
+                inspectionLog.prepend(newLog);
+
+                // Auto-scroll al principio
+                logContainer.scrollTop = 0;
+            }
+
+            function resetLote() {
+                totalInspected = 0;
+                totalApproved = 0;
+                totalRejected = 0;
+                loteId++;
+
+                totalInspectedDisplay.textContent = '0';
+                totalApprovedDisplay.textContent = '0';
+                totalRejectedDisplay.textContent = '0';
+                loteIdDisplay.textContent = `L-${String(loteId).padStart(3, '0')}`;
+
+                resultDisplay.className = 'mt-2 p-6 rounded-lg text-center min-h-36 flex flex-col justify-center items-center bg-gray-50 border border-gray-200';
+                resultDisplay.innerHTML = `<p class="text-3xl font-bold text-gray-400">Presione "Inspeccionar"</p>`;
+                
+                inspectionLog.innerHTML = `<p>[${new Date().toLocaleTimeString('es-ES')}] - --- INICIANDO NUEVO LOTE ${loteIdDisplay.textContent} ---</p>`;
+            }
+
+            // --- Event Listeners ---
+            inspectBtn.addEventListener('click', inspectProduct);
+            resetBtn.addEventListener('click', resetLote);
+
+            // Iniciar log
+            logEntry('Sistema', 'INICIADO', `Línea de inspección activada`, `LOTE-${String(loteId).padStart(3, '0')}`, 'approved');
+        });
+    </script>
+</body>
+</html>
+
